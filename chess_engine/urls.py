@@ -16,9 +16,10 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
-from game.views import board_view
+from game.views import board_view, reset_game
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', board_view),  # This makes the board show on the home page
+    path('reset/', reset_game), # This fixes the 'Not Found' error
 ]
