@@ -3,25 +3,79 @@ import chess
 import chess.svg
 import random  # This fixes the red line under 'random.choice'
 
+# Positive values for White, we will flip them for Black
+pawn_table = [
+    0,  0,  0,  0,  0,  0,  0,  0,
+    50, 50, 50, 50, 50, 50, 50, 50,
+    10, 10, 20, 30, 30, 20, 10, 10,
+     5,  5, 10, 25, 25, 10,  5,  5,
+     0,  0,  0, 20, 20,  0,  0,  0,
+     5, -5,-10,  0,  0,-10, -5,  5,
+     5, 10, 10,-20,-20, 10, 10,  5,
+     0,  0,  0,  0,  0,  0,  0,  0
+]
+
+knight_table = [
+    -50,-40,-30,-30,-30,-30,-40,-50,
+    -40,-20,  0,  0,  0,  0,-20,-40,
+    -30,  0, 10, 15, 15, 10,  0,-30,
+    -30,  5, 15, 20, 20, 15,  5,-30,
+    -30,  0, 15, 20, 20, 15,  0,-30,
+    -30,  5, 10, 15, 15, 10,  5,-30,
+    -40,-20,  0,  5,  5,  0,-20,-40,
+    -50,-40,-30,-30,-30,-30,-40,-50
+]
+
+bishop_table = [
+    -20,-10,-10,-10,-10,-10,-10,-20,
+    -10,  0,  0,  0,  0,  0,  0,-10,
+    -10,  0,  5, 10, 10,  5,  0,-10,
+    -10,  5,  5, 10, 10,  5,  5,-10,
+    -10,  0, 10, 10, 10, 10,  0,-10,
+    -10, 10, 10, 10, 10, 10, 10,-10,
+    -10,  5,  0,  0,  0,  0,  5,-10,
+    -20,-10,-10,-10,-10,-10,-10,-20
+]
+
+king_table = [
+    -30,-40,-40,-50,-50,-40,-40,-30,
+    -30,-40,-40,-50,-50,-40,-40,-30,
+    -30,-40,-40,-50,-50,-40,-40,-30,
+    -30,-40,-40,-50,-50,-40,-40,-30,
+    -20,-30,-30,-40,-40,-30,-30,-20,
+    -10,-20,-20,-20,-20,-20,-20,-10,
+     20, 20,  0,  0,  0,  0, 20, 20,
+     20, 30, 10,  0,  0, 10, 30, 20
+]
 
 
 def evaluate_board(board):
-    # Basic material counting: P=100, N/B=300, R=500, Q=900
     if board.is_checkmate():
         return -9999 if board.turn else 9999
     
-    wp = len(board.pieces(chess.PAWN, chess.WHITE))
-    bp = len(board.pieces(chess.PAWN, chess.BLACK))
-    wn = len(board.pieces(chess.KNIGHT, chess.WHITE))
-    bn = len(board.pieces(chess.KNIGHT, chess.BLACK))
-    wb = len(board.pieces(chess.BISHOP, chess.WHITE))
-    bb = len(board.pieces(chess.BISHOP, chess.BLACK))
-    wr = len(board.pieces(chess.ROOK, chess.WHITE))
-    br = len(board.pieces(chess.ROOK, chess.BLACK))
-    wq = len(board.pieces(chess.QUEEN, chess.WHITE))
-    bq = len(board.pieces(chess.QUEEN, chess.BLACK))
-    
-    return 100*(wp-bp) + 300*(wn-bn + wb-bb) + 500*(wr-br) + 900*(wq-bq)
+    total_evaluation = 0
+    for square in chess.SQUARES:
+        piece = board.piece_at(square)
+        if not piece:
+            continue
+        
+        # Base material values
+        val = 0
+        if piece.piece_type == chess.PAWN: val = 100 + pawn_table[square if piece.color == chess.WHITE else chess.square_mirror(square)]
+        elif piece.piece_type == chess.KNIGHT: val = 320 + knight_table[square if piece.color == chess.WHITE else chess.square_mirror(square)]
+        elif piece.piece_type == chess.BISHOP: val = 330 + bishop_table[square if piece.color == chess.WHITE else chess.square_mirror(square)]
+        elif piece.piece_type == chess.ROOK: val = 500
+        elif piece.piece_type == chess.QUEEN: val = 900
+        elif piece.piece_type == chess.KING: val = 20000 + king_table[square if piece.color == chess.WHITE else chess.square_mirror(square)]
+        
+        if piece.color == chess.WHITE:
+            total_evaluation += val
+        else:
+            total_evaluation -= val
+            
+    return total_evaluation
+
+
 
 def minimax(board, depth, alpha, beta, maximizing_player):
     if depth == 0 or board.is_game_over():
