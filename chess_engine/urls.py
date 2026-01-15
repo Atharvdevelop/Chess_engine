@@ -16,7 +16,9 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from game.views import board_view
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('', board_view),  # This makes the board show on the home page
 ]
