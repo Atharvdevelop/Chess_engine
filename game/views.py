@@ -1,3 +1,6 @@
+#views.py old
+
+
 from django.shortcuts import render, redirect
 import chess
 import chess.svg
