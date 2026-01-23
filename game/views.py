@@ -160,7 +160,7 @@ def board_view(request):
                 board.push(move)
 
                 if not board.is_game_over():
-                    engine_move = get_best_move(board, depth=4)
+                    engine_move = get_best_move(board, depth=3)
                     if engine_move:
                         board.push(engine_move)
 
