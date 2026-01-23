@@ -12,7 +12,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-9c5)0%6@18sujkxcu6-!n
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
 # 3. Add your Render URL here so your friends at SRMCEM can access it
-ALLOWED_HOSTS = ['athrv-chess-engine.onrender.com', 'localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['atharv-chess-engine.onrender.com', 'localhost', '127.0.0.1']
 
 
 # Application definition
