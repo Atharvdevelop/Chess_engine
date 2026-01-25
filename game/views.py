@@ -113,31 +113,51 @@ def get_best_move(board, depth):
 # =========================
 # DJANGO VIEW (UPDATED TO DEPTH 4)
 # =========================
+
 def board_view(request):
+    # 1. Get or set User Preference (Default to White)
+    user_color = request.session.get('user_color', 'white')
     fen = request.session.get('board_fen', 'start')
     board = chess.Board() if fen == 'start' else chess.Board(fen)
 
+    # 2. Handle Side Selection via GET request
+    if request.method == "GET" and 'choose_color' in request.GET:
+        selected = request.GET.get('choose_color')
+        request.session['user_color'] = selected
+        request.session['board_fen'] = 'start'  # Reset board for new side
+        return redirect('/')
+
+    # 3. AI Automatic Move Logic
+    # The AI moves if it is the AI's turn based on your chosen color
+    ai_turn = (user_color == 'white' and board.turn == chess.BLACK) or \
+              (user_color == 'black' and board.turn == chess.WHITE)
+
+    if ai_turn and not board.is_game_over():
+        engine_move = get_best_move(board, depth=4)
+        if engine_move:
+            board.push(engine_move)
+            request.session['board_fen'] = board.fen()
+            return redirect('/')
+
+    # 4. Handle Player Move
     if request.method == "POST":
         move_uci = request.POST.get('move')
         try:
             move = chess.Move.from_uci(move_uci)
             if move in board.legal_moves:
                 board.push(move)
-
-                if not board.is_game_over():
-                    # NOW USING DEPTH 4
-                    engine_move = get_best_move(board, depth=4)
-                    if engine_move:
-                        board.push(engine_move)
-
                 request.session['board_fen'] = board.fen()
         except:
             pass
-
         return redirect('/')
 
-    return render(request, 'game/board.html', {'fen': board.fen()})
+    return render(request, 'game/board.html', {
+        'fen': board.fen(),
+        'user_color': user_color
+    })
 
 def reset_game(request):
-    request.session.pop('board_fen', None)
+    # This now clears the board but KEEPS your color preference
+    request.session['board_fen'] = 'start'
     return redirect('/')
+

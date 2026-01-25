@@ -6,18 +6,32 @@
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
     <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <style>
+        /* This ensures the controls don't push the board too far down */
+        .controls { margin-top: 20px; padding: 10px; background: #f9f9f9; border-radius: 8px; }
+        .btn { padding: 8px 16px; margin-right: 5px; cursor: pointer; text-decoration: none; background: #eee; border: 1px solid #ccc; color: black; display: inline-block; border-radius: 4px; }
+        .btn-danger { background: #ff4444; color: white; border: none; }
+        .active { background: #444; color: white; }
+        h1 { font-family: sans-serif; }
+    </style>
 </head>
 <body>
     <h1>Drag & Drop Chess</h1>
-    <div id="myBoard" style="width: 400px"></div>
-    <button onclick="location.href='/reset/'">Reset Game</button>
+
+    <div id="myBoard" style="width: 400px; margin: 0 auto;"></div>
+
+    <div class="controls" style="width: 400px; margin: 20px auto; text-align: center;">
+        <span>Playing as: <strong>{{ user_color|title }}</strong></span><br><br>
+        <a href="/?choose_color=white" class="btn {% if user_color == 'white' %}active{% endif %}">Play as White</a>
+        <a href="/?choose_color=black" class="btn {% if user_color == 'black' %}active{% endif %}">Play as Black</a>
+        <button class="btn btn-danger" onclick="location.href='/reset/'">Reset Game</button>
+    </div>
 
     <script>
         var board = null
-        var game = new Chess('{{ fen }}') // Initialize with the current position
+        var game = new Chess('{{ fen }}')
 
-       function onDrop (source, target) {
-            // Check if this move is a promotion
+        function onDrop (source, target) {
             var move_cfg = {
                 from: source,
                 to: target,
@@ -25,11 +39,8 @@
             }
 
             var move = game.move(move_cfg)
-
-            // If illegal, snap back
             if (move === null) return 'snapback'
 
-            // This is the fix: If it's a promotion, we must send the 'q' to Django
             var move_string = source + target
             if (move.flags.includes('p')) {
                 move_string += 'q'
@@ -59,8 +70,8 @@
         var config = {
             draggable: true,
             position: '{{ fen|default:"start" }}',
+            orientation: '{{ user_color }}', 
             onDrop: onDrop,
-            // Add this line below to load images from the web
             pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
         }
         board = Chessboard('myBoard', config)
