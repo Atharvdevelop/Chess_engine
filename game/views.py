@@ -1,153 +1,118 @@
-#views.py old
-
-
 from django.shortcuts import render, redirect
 import chess
 import chess.svg
+from .tables import PAWN_TABLE, KNIGHT_TABLE, BISHOP_TABLE, KING_TABLE
+
+# (Keep your pawn_table, knight_table, bishop_table, and king_table exactly as they are)
 
 # =========================
-# PIECE-SQUARE TABLES
+# EVALUATION (STAYS THE SAME)
 # =========================
-
-pawn_table = [
-    0, 0, 0, 0, 0, 0, 0, 0,
-    50, 50, 50, 50, 50, 50, 50, 50,
-    10, 10, 20, 30, 30, 20, 10, 10,
-    5, 5, 10, 25, 25, 10, 5, 5,
-    0, 0, 0, 20, 20, 0, 0, 0,
-    5, -5, -10, 0, 0, -10, -5, 5,
-    5, 10, 10, -20, -20, 10, 10, 5,
-    0, 0, 0, 0, 0, 0, 0, 0
-]
-
-knight_table = [
-    -50,-40,-30,-30,-30,-30,-40,-50,
-    -40,-20,  0,  0,  0,  0,-20,-40,
-    -30,  0, 10, 15, 15, 10,  0,-30,
-    -30,  5, 15, 20, 20, 15,  5,-30,
-    -30,  0, 15, 20, 20, 15,  0,-30,
-    -30,  5, 10, 15, 15, 10,  5,-30,
-    -40,-20,  0,  5,  5,  0,-20,-40,
-    -50,-40,-30,-30,-30,-30,-40,-50
-]
-
-bishop_table = [
-    -20,-10,-10,-10,-10,-10,-10,-20,
-    -10,  0,  0,  0,  0,  0,  0,-10,
-    -10,  0,  5, 10, 10,  5,  0,-10,
-    -10,  5,  5, 10, 10,  5,  5,-10,
-    -10,  0, 10, 10, 10, 10,  0,-10,
-    -10, 10, 10, 10, 10, 10, 10,-10,
-    -10,  5,  0,  0,  0,  0,  5,-10,
-    -20,-10,-10,-10,-10,-10,-10,-20
-]
-
-king_table = [
-    -30,-40,-40,-50,-50,-40,-40,-30,
-    -30,-40,-40,-50,-50,-40,-40,-30,
-    -30,-40,-40,-50,-50,-40,-40,-30,
-    -30,-40,-40,-50,-50,-40,-40,-30,
-    -20,-30,-30,-40,-40,-30,-30,-20,
-    -10,-20,-20,-20,-20,-20,-20,-10,
-     20, 20,  0,  0,  0,  0, 20, 20,
-     20, 30, 10,  0,  0, 10, 30, 20
-]
-
-# =========================
-# EVALUATION (WHITE POV ONLY)
-# =========================
-
 def evaluate_board(board):
     if board.is_checkmate():
         return -9999 if board.turn == chess.WHITE else 9999
     if board.is_stalemate() or board.is_insufficient_material():
         return 0
 
-    score = 0   # ← THIS WAS MISSING
-
+    score = 0
     for square in chess.SQUARES:
         piece = board.piece_at(square)
         if not piece:
             continue
 
-        idx = square if piece.color == chess.WHITE else chess.square_mirror(square)   
+        idx = square if piece.color == chess.WHITE else chess.square_mirror(square)
         val = 0
 
         if piece.piece_type == chess.PAWN:
-            val = 100 + pawn_table[idx]
+            val = 100 + PAWN_TABLE[idx]
         elif piece.piece_type == chess.KNIGHT:
-            val = 320 + knight_table[idx]
+            val = 320 + KNIGHT_TABLE[idx]
         elif piece.piece_type == chess.BISHOP:
-            val = 330 + bishop_table[idx]
+            val = 330 + BISHOP_TABLE[idx]
         elif piece.piece_type == chess.ROOK:
             val = 500
         elif piece.piece_type == chess.QUEEN:
             val = 900
         elif piece.piece_type == chess.KING:
-            val = 20000 + king_table[idx]
+            val = 20000 + KING_TABLE[idx]
 
         score += val if piece.color == chess.WHITE else -val
-
     return score
 
 # =========================
-# MINIMAX + ALPHA BETA
+# NEW: MOVE ORDERING (SPEED BOOST)
 # =========================
+def order_moves(board):
+    """Sorts moves to check captures first, making Alpha-Beta much faster."""
+    moves = list(board.legal_moves)
+    # Checks captures first because they are most likely to cause pruning
+    moves.sort(key=lambda move: board.is_capture(move), reverse=True)
+    return moves
 
+# =========================
+# OPTIMIZED MINIMAX + ALPHA BETA
+# =========================
 def minimax(board, depth, alpha, beta, maximizing):
     if depth == 0 or board.is_game_over():
         return evaluate_board(board)
 
+    ordered_moves = order_moves(board)
+
     if maximizing:
         max_eval = -99999
-        for move in board.legal_moves:
+        for move in ordered_moves:
             board.push(move)
             eval = minimax(board, depth - 1, alpha, beta, False)
             board.pop()
             max_eval = max(max_eval, eval)
             alpha = max(alpha, eval)
             if beta <= alpha:
-                break
+                break # Prune branch
         return max_eval
     else:
         min_eval = 99999
-        for move in board.legal_moves:
+        for move in ordered_moves:
             board.push(move)
             eval = minimax(board, depth - 1, alpha, beta, True)
             board.pop()
             min_eval = min(min_eval, eval)
             beta = min(beta, eval)
             if beta <= alpha:
-                break
+                break # Prune branch
         return min_eval
 
 # =========================
-# BEST MOVE SELECTION
+# BEST MOVE SELECTION (DEPTH 4)
 # =========================
-
 def get_best_move(board, depth):
     best_move = None
     maximizing = board.turn == chess.WHITE
-    best_value = -99999 if maximizing else 99999
+    best_value = -100000 if maximizing else 100000
+    
+    alpha = -100000
+    beta = 100000
 
-    for move in board.legal_moves:
+    for move in order_moves(board):
         board.push(move)
-        value = minimax(board, depth - 1, -100000, 100000, not maximizing)
+        value = minimax(board, depth - 1, alpha, beta, not maximizing)
         board.pop()
 
-        if maximizing and value > best_value:
-            best_value = value
-            best_move = move
-        elif not maximizing and value < best_value:
-            best_value = value
-            best_move = move
+        if maximizing:
+            if value > best_value:
+                best_value = value
+                best_move = move
+            alpha = max(alpha, value)
+        else:
+            if value < best_value:
+                best_value = value
+                best_move = move
+            beta = min(beta, value)
 
     return best_move
 
 # =========================
-# DJANGO VIEW
+# DJANGO VIEW (UPDATED TO DEPTH 4)
 # =========================
-
 def board_view(request):
     fen = request.session.get('board_fen', 'start')
     board = chess.Board() if fen == 'start' else chess.Board(fen)
@@ -160,7 +125,8 @@ def board_view(request):
                 board.push(move)
 
                 if not board.is_game_over():
-                    engine_move = get_best_move(board, depth=3)
+                    # NOW USING DEPTH 4
+                    engine_move = get_best_move(board, depth=4)
                     if engine_move:
                         board.push(engine_move)
 
