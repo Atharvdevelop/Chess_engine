@@ -1,26 +1,68 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Modern Chess Engine</title>
     <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
     <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
     <style>
-        /* This ensures the controls don't push the board too far down */
-        .controls { margin-top: 20px; padding: 10px; background: #f9f9f9; border-radius: 8px; }
-        .btn { padding: 8px 16px; margin-right: 5px; cursor: pointer; text-decoration: none; background: #eee; border: 1px solid #ccc; color: black; display: inline-block; border-radius: 4px; }
+        h1 { font-family: sans-serif; text-align: center; }
+
+        /* Desktop View (Default) */
+        #myBoard { 
+            width: 400px; 
+            margin: 0 auto; 
+        }
+
+        .controls { 
+            width: 400px; 
+            margin: 20px auto; 
+            text-align: center; 
+            padding: 10px; 
+            background: #f9f9f9; 
+            border-radius: 8px; 
+        }
+
+        .btn { 
+            padding: 8px 16px; 
+            margin: 5px; 
+            cursor: pointer; 
+            text-decoration: none; 
+            background: #eee; 
+            border: 1px solid #ccc; 
+            color: black; 
+            display: inline-block; 
+            border-radius: 4px; 
+        }
+
         .btn-danger { background: #ff4444; color: white; border: none; }
         .active { background: #444; color: white; }
-        h1 { font-family: sans-serif; }
+
+        /* Mobile View (Screens smaller than 600px) */
+        @media only screen and (max-width: 600px) {
+            #myBoard { 
+                width: 95vw !important; /* Uses 95% of the mobile screen width */
+            }
+            .controls { 
+                width: 95vw !important; 
+            }
+            .btn {
+                width: 80%; /* Makes buttons larger and stackable for thumbs */
+                padding: 12px;
+                display: block;
+                margin: 10px auto;
+            }
+        }
     </style>
 </head>
 <body>
     <h1>Drag & Drop Chess</h1>
 
-    <div id="myBoard" style="width: 400px; margin: 0 auto;"></div>
+    <div id="myBoard"></div>
 
-    <div class="controls" style="width: 400px; margin: 20px auto; text-align: center;">
+    <div class="controls">
         <span>Playing as: <strong>{{ user_color|title }}</strong></span><br><br>
         <a href="/?choose_color=white" class="btn {% if user_color == 'white' %}active{% endif %}">Play as White</a>
         <a href="/?choose_color=black" class="btn {% if user_color == 'black' %}active{% endif %}">Play as Black</a>
@@ -28,25 +70,25 @@
     </div>
 
     <script>
-        var board = null
-        var game = new Chess('{{ fen }}')
+        var board = null;
+        var game = new Chess('{{ fen }}');
 
         function onDrop (source, target) {
             var move_cfg = {
                 from: source,
                 to: target,
                 promotion: 'q' 
-            }
+            };
 
-            var move = game.move(move_cfg)
-            if (move === null) return 'snapback'
+            var move = game.move(move_cfg);
+            if (move === null) return 'snapback';
 
-            var move_string = source + target
+            var move_string = source + target;
             if (move.flags.includes('p')) {
-                move_string += 'q'
+                move_string += 'q';
             }
 
-            updateBackend(move_string)
+            updateBackend(move_string);
         }
 
         function updateBackend(move) {
@@ -73,8 +115,11 @@
             orientation: '{{ user_color }}', 
             onDrop: onDrop,
             pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
-        }
-        board = Chessboard('myBoard', config)
+        };
+        board = Chessboard('myBoard', config);
+
+        // Fix: This ensures the board resizes correctly when the phone orientation changes
+        $(window).resize(board.resize);
     </script>
 </body>
 </html>
