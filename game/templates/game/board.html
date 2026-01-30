@@ -9,51 +9,29 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
     <style>
         h1 { font-family: sans-serif; text-align: center; }
-
-        /* Desktop View (Default) */
-        #myBoard { 
-            width: 400px; 
-            margin: 0 auto; 
+        #myBoard { width: 400px; margin: 0 auto; }
+        .controls, .history-box { 
+            width: 400px; margin: 20px auto; text-align: center; 
+            padding: 10px; background: #f9f9f9; border-radius: 8px; 
         }
-
-        .controls { 
-            width: 400px; 
-            margin: 20px auto; 
-            text-align: center; 
-            padding: 10px; 
-            background: #f9f9f9; 
-            border-radius: 8px; 
+        #moveList {
+            height: 120px; overflow-y: auto; background: white; 
+            padding: 10px; border: 1px solid #ccc; font-family: monospace;
+            line-height: 1.6; text-align: left;
         }
-
         .btn { 
-            padding: 8px 16px; 
-            margin: 5px; 
-            cursor: pointer; 
-            text-decoration: none; 
-            background: #eee; 
-            border: 1px solid #ccc; 
-            color: black; 
-            display: inline-block; 
-            border-radius: 4px; 
+            padding: 8px 16px; margin: 5px; cursor: pointer; 
+            text-decoration: none; background: #eee; border: 1px solid #ccc; 
+            color: black; display: inline-block; border-radius: 4px; 
         }
-
         .btn-danger { background: #ff4444; color: white; border: none; }
+        .btn-custom { background: #4a90e2; color: white; border: none; }
         .active { background: #444; color: white; }
+        .highlight-square { box-shadow: inset 0 0 3px 3px yellow; }
 
-        /* Mobile View (Screens smaller than 600px) */
         @media only screen and (max-width: 600px) {
-            #myBoard { 
-                width: 95vw !important; /* Uses 95% of the mobile screen width */
-            }
-            .controls { 
-                width: 95vw !important; 
-            }
-            .btn {
-                width: 80%; /* Makes buttons larger and stackable for thumbs */
-                padding: 12px;
-                display: block;
-                margin: 10px auto;
-            }
+            #myBoard, .controls, .history-box { width: 95vw !important; }
+            .btn { width: 80%; padding: 12px; display: block; margin: 10px auto; }
         }
     </style>
 </head>
@@ -62,33 +40,86 @@
 
     <div id="myBoard"></div>
 
+    <div class="history-box">
+        <strong>Game History:</strong>
+        <div id="moveList">
+            {% for move in move_history %}
+                {% if not forloop.counter|divisibleby:2 %}
+                    <span style="color: #666;">{% widthratio forloop.counter|add:1 2 1 %}.</span> 
+                    <strong>{{ move }}</strong>
+                {% else %}
+                    <strong>{{ move }}</strong> &nbsp;
+                {% endif %}
+            {% empty %}
+                <span style="color: #999;">No moves played yet.</span>
+            {% endfor %}
+        </div>
+        <input type="hidden" id="pgnData" value="{% for move in move_history %}{{ move }} {% endfor %}">
+        <button class="btn" style="width: 100%; margin-top: 10px;" onclick="copyPGN()">Copy Game Moves (PGN)</button>
+    </div>
+
     <div class="controls">
         <span>Playing as: <strong>{{ user_color|title }}</strong></span><br><br>
         <a href="/?choose_color=white" class="btn {% if user_color == 'white' %}active{% endif %}">Play as White</a>
         <a href="/?choose_color=black" class="btn {% if user_color == 'black' %}active{% endif %}">Play as Black</a>
+        <button class="btn btn-custom" onclick="setCustomFEN()">Set Custom Position (FEN)</button>
         <button class="btn btn-danger" onclick="location.href='/reset/'">Reset Game</button>
     </div>
 
     <script>
         var board = null;
         var game = new Chess('{{ fen }}');
+        var selectedSquare = null;
 
-        function onDrop (source, target) {
-            var move_cfg = {
-                from: source,
-                to: target,
-                promotion: 'q' 
-            };
+        var moveListDiv = document.getElementById("moveList");
+        if (moveListDiv) { moveListDiv.scrollTop = moveListDiv.scrollHeight; }
 
-            var move = game.move(move_cfg);
-            if (move === null) return 'snapback';
-
-            var move_string = source + target;
-            if (move.flags.includes('p')) {
-                move_string += 'q';
+        function setCustomFEN() {
+            var fen = prompt("Please enter the FEN string:");
+            if (fen != null && fen != "") {
+                window.location.href = "/?set_fen=" + encodeURIComponent(fen);
             }
+        }
 
-            updateBackend(move_string);
+        function copyPGN() {
+            var moves = document.getElementById("pgnData").value.trim();
+            if (moves === "") {
+                alert("No moves to copy!");
+                return;
+            }
+            navigator.clipboard.writeText(moves).then(function() {
+                alert("Moves copied to clipboard!");
+            });
+        }
+
+        function onDrop(source, target) {
+            var move = game.move({ from: source, to: target, promotion: 'q' });
+            if (move === null) return 'snapback';
+            updateBackend(source + target + (move.flags.includes('p') ? 'q' : ''));
+        }
+
+        function onSquareClick(square) {
+            $('.square-55d6b').removeClass('highlight-square');
+            if (selectedSquare === null) {
+                var piece = game.get(square);
+                if (piece && piece.color === game.turn()) {
+                    selectedSquare = square;
+                    $('.square-' + square).addClass('highlight-square');
+                }
+            } else {
+                var move = game.move({ from: selectedSquare, to: square, promotion: 'q' });
+                if (move !== null) {
+                    updateBackend(selectedSquare + square + (move.flags.includes('p') ? 'q' : ''));
+                } else {
+                    var piece = game.get(square);
+                    if (piece && piece.color === game.turn()) {
+                        selectedSquare = square;
+                        $('.square-' + square).addClass('highlight-square');
+                    } else {
+                        selectedSquare = null;
+                    }
+                }
+            }
         }
 
         function updateBackend(move) {
@@ -114,11 +145,10 @@
             position: '{{ fen|default:"start" }}',
             orientation: '{{ user_color }}', 
             onDrop: onDrop,
+            onSquareClick: onSquareClick,
             pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
         };
         board = Chessboard('myBoard', config);
-
-        // Fix: This ensures the board resizes correctly when the phone orientation changes
         $(window).resize(board.resize);
     </script>
 </body>
