@@ -1,4 +1,7 @@
 # game/tables.py
+# Piece-Square Tables (PST): positional bonus/penalty for each square.
+# Indexed from a8 (index 0) to h1 (index 63) for White.
+# For Black pieces, the board is mirrored via chess.square_mirror().
 
 PAWN_TABLE = [
     0, 0, 0, 0, 0, 0, 0, 0,
@@ -33,6 +36,30 @@ BISHOP_TABLE = [
     -20,-10,-10,-10,-10,-10,-10,-20
 ]
 
+# Rooks want open files and the 7th rank.
+ROOK_TABLE = [
+     0,  0,  0,  0,  0,  0,  0,  0,
+     5, 10, 10, 10, 10, 10, 10,  5,
+    -5,  0,  0,  0,  0,  0,  0, -5,
+    -5,  0,  0,  0,  0,  0,  0, -5,
+    -5,  0,  0,  0,  0,  0,  0, -5,
+    -5,  0,  0,  0,  0,  0,  0, -5,
+    -5,  0,  0,  0,  0,  0,  0, -5,
+     0,  0,  0,  5,  5,  0,  0,  0
+]
+
+# Queens prefer central control but should avoid exposing themselves early.
+QUEEN_TABLE = [
+    -20,-10,-10, -5, -5,-10,-10,-20,
+    -10,  0,  0,  0,  0,  0,  0,-10,
+    -10,  0,  5,  5,  5,  5,  0,-10,
+     -5,  0,  5,  5,  5,  5,  0, -5,
+      0,  0,  5,  5,  5,  5,  0, -5,
+    -10,  5,  5,  5,  5,  5,  0,-10,
+    -10,  0,  5,  0,  0,  0,  0,-10,
+    -20,-10,-10, -5, -5,-10,-10,-20
+]
+
 KING_TABLE = [
     -30,-40,-40,-50,-50,-40,-40,-30,
     -30,-40,-40,-50,-50,-40,-40,-30,
@@ -42,4 +69,4 @@ KING_TABLE = [
     -10,-20,-20,-20,-20,-20,-20,-10,
      20, 20,  0,  0,  0,  0, 20, 20,
      20, 30, 10,  0,  0, 10, 30, 20
-]
+]

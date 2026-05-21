@@ -1,5 +1,8 @@
 from django.shortcuts import render, redirect
+from django.http import JsonResponse
+# pyrefly: ignore [missing-import]
 import chess
+import json
 from .tables import PAWN_TABLE, KNIGHT_TABLE, BISHOP_TABLE, KING_TABLE
 
 # ==========================================================
@@ -120,9 +123,10 @@ def board_view(request):
 
     # User ke color choice ke according game reset karna
     if request.method == "GET" and 'choose_color' in request.GET:
-        request.session['user_color'] = request.GET.get('choose_color')
+        user_color = request.GET.get('choose_color')
+        request.session['user_color'] = user_color
         request.session['board_fen'], request.session['move_history'] = 'start', []
-        return redirect('/')
+        board = chess.Board()
 
     # Custom Position logic: FEN input validate karke load karna
     if request.method == "GET" and 'set_fen' in request.GET:
@@ -130,38 +134,100 @@ def board_view(request):
         try:
             chess.Board(custom_fen) 
             request.session['board_fen'], request.session['move_history'] = custom_fen, []
-            return redirect('/')
-        except ValueError: pass
+            board = chess.Board(custom_fen)
+        except ValueError:
+            pass
 
-    # AI Turn logic: Agar engine ki baari hai toh move calculate karna
+    # AI Turn logic for initial/GET load (e.g., if user plays black and game just starts/resets)
     ai_turn = (user_color == 'white' and board.turn == chess.BLACK) or \
               (user_color == 'black' and board.turn == chess.WHITE)
 
-    if ai_turn and not board.is_game_over():
-        engine_move = get_best_move(board, depth=4)
-        if engine_move:
-            move_history.append(board.san(engine_move)) 
-            board.push(engine_move)
-            # Nayi state session mein save karna
-            request.session['board_fen'], request.session['move_history'] = board.fen(), move_history
-            return redirect('/')
+    if request.method == "GET":
+        if ai_turn and not board.is_game_over():
+            engine_move = get_best_move(board, depth=4)
+            if engine_move:
+                move_history.append(board.san(engine_move)) 
+                board.push(engine_move)
+                request.session['board_fen'], request.session['move_history'] = board.fen(), move_history
+        
+        # Template render karna context ke saath
+        return render(request, 'game/board.html', {
+            'fen': board.fen(), 'user_color': user_color, 'move_history': move_history 
+        })
 
-    # Player Move logic: Frontend se POST request handle karna
+    # Player Move logic: Frontend se POST (AJAX/JSON) request handle karna
     if request.method == "POST":
-        move_uci = request.POST.get('move')
+        try:
+            data = json.loads(request.body)
+            move_uci = data.get('move')
+        except (json.JSONDecodeError, AttributeError):
+            return JsonResponse({'success': False, 'error': 'Invalid JSON body'}, status=400)
+
+        if not move_uci:
+            return JsonResponse({'success': False, 'error': 'No move provided'}, status=400)
+            
         try:
             move = chess.Move.from_uci(move_uci)
-            if move in board.legal_moves:
-                move_history.append(board.san(move)) 
-                board.push(move)
-                request.session['board_fen'], request.session['move_history'] = board.fen(), move_history
-        except: pass
-        return redirect('/')
+        except ValueError:
+            return JsonResponse({'success': False, 'error': 'Invalid move format'}, status=400)
 
-    # Template render karna context ke saath
-    return render(request, 'game/board.html', {
-        'fen': board.fen(), 'user_color': user_color, 'move_history': move_history 
-    })
+        if move not in board.legal_moves:
+            return JsonResponse({'success': False, 'error': 'Illegal move'}, status=400)
+
+        # Apply player's move
+        player_san = board.san(move)
+        move_history.append(player_san) 
+        board.push(move)
+        
+        # Save player's move to session
+        request.session['board_fen'] = board.fen()
+        request.session['move_history'] = move_history
+        
+        ai_played = False
+        ai_move_san = None
+        
+        # Check if it's the AI's turn next
+        ai_turn = (user_color == 'white' and board.turn == chess.BLACK) or \
+                  (user_color == 'black' and board.turn == chess.WHITE)
+                  
+        if ai_turn and not board.is_game_over():
+            engine_move = get_best_move(board, depth=4)
+            if engine_move:
+                ai_move_san = board.san(engine_move)
+                move_history.append(ai_move_san)
+                board.push(engine_move)
+                ai_played = True
+                
+                # Save AI's move to session
+                request.session['board_fen'] = board.fen()
+                request.session['move_history'] = move_history
+
+        # Determine if the game is over and get the reason
+        is_game_over = board.is_game_over()
+        game_over_reason = None
+        if is_game_over:
+            if board.is_checkmate():
+                game_over_reason = "Checkmate"
+            elif board.is_stalemate():
+                game_over_reason = "Stalemate"
+            elif board.is_insufficient_material():
+                game_over_reason = "Insufficient Material"
+            elif board.is_fivefold_repetition() or board.is_repetition(3):
+                game_over_reason = "Repetition"
+            elif board.is_seventyfive_moves() or board.is_fifty_moves():
+                game_over_reason = "Fifty-move rule"
+            else:
+                game_over_reason = "Draw"
+
+        return JsonResponse({
+            'success': True,
+            'board_fen': board.fen(),
+            'ai_played': ai_played,
+            'ai_move': ai_move_san,
+            'move_history': move_history,
+            'is_game_over': is_game_over,
+            'game_over_reason': game_over_reason
+        })
 
 def reset_game(request):
     # Session variables ko clear karke game restart karna
