@@ -5,6 +5,21 @@ import chess
 import json
 from .engine import get_best_move
 
+def _reconstruct_board(session):
+    """
+    Reconstructs the chess.Board with full move history from the session.
+    This is critical for detecting threefold repetition.
+    """
+    initial_fen = session.get('initial_fen', 'start')
+    move_history = session.get('move_history', [])
+    board = chess.Board() if initial_fen == 'start' else chess.Board(initial_fen)
+    for move_san in move_history:
+        try:
+            board.push_san(move_san)
+        except ValueError:
+            pass
+    return board
+
 # ==========================================================
 # DJANGO VIEWS: User requests aur UI interaction handle karna
 # ==========================================================
@@ -15,13 +30,17 @@ def board_view(request):
     fen = request.session.get('board_fen', 'start')
     move_history = request.session.get('move_history', [])
 
-    board = chess.Board() if fen == 'start' else chess.Board(fen)
+    if 'initial_fen' not in request.session:
+        request.session['initial_fen'] = 'start'
+
+    board = _reconstruct_board(request.session)
 
     # User ke color choice ke according game reset karna
     if request.method == "GET" and 'choose_color' in request.GET:
         user_color = request.GET.get('choose_color')
         request.session['user_color'] = user_color
         request.session['board_fen'], request.session['move_history'] = 'start', []
+        request.session['initial_fen'] = 'start'
         board = chess.Board()
 
     # Custom Position logic: FEN input validate karke load karna
@@ -30,6 +49,7 @@ def board_view(request):
         try:
             chess.Board(custom_fen)
             request.session['board_fen'], request.session['move_history'] = custom_fen, []
+            request.session['initial_fen'] = custom_fen
             board = chess.Board(custom_fen)
         except ValueError:
             pass  # Invalid FEN: silently ignore and keep the current board
@@ -39,7 +59,7 @@ def board_view(request):
               (user_color == 'black' and board.turn == chess.WHITE)
 
     if request.method == "GET":
-        if ai_turn and not board.is_game_over():
+        if ai_turn and not board.is_game_over(claim_draw=True):
             engine_move = get_best_move(board, depth=4)
             if engine_move:
                 move_history.append(board.san(engine_move))
@@ -86,7 +106,7 @@ def board_view(request):
         ai_turn = (user_color == 'white' and board.turn == chess.BLACK) or \
                   (user_color == 'black' and board.turn == chess.WHITE)
 
-        if ai_turn and not board.is_game_over():
+        if ai_turn and not board.is_game_over(claim_draw=True):
             engine_move = get_best_move(board, depth=4)
             if engine_move:
                 ai_move_san = board.san(engine_move)
@@ -104,7 +124,7 @@ def board_view(request):
             'ai_played': ai_played,
             'ai_move': ai_move_san,
             'move_history': move_history,
-            'is_game_over': board.is_game_over(),
+            'is_game_over': board.is_game_over(claim_draw=True),
             'game_over_reason': _get_game_over_reason(board),
         })
 
@@ -129,9 +149,10 @@ def make_move_api(request):
 
     # Rebuild board from session
     user_color   = request.session.get('user_color', 'white')
-    fen          = request.session.get('board_fen', 'start')
     move_history = request.session.get('move_history', [])
-    board = chess.Board() if fen == 'start' else chess.Board(fen)
+    if 'initial_fen' not in request.session:
+        request.session['initial_fen'] = 'start'
+    board = _reconstruct_board(request.session)
 
     # Parse SAN → validate as a legal move
     try:
@@ -159,7 +180,7 @@ def make_move_api(request):
     ai_turn = (user_color == 'white' and board.turn == chess.BLACK) or \
               (user_color == 'black' and board.turn == chess.WHITE)
 
-    if ai_turn and not board.is_game_over():
+    if ai_turn and not board.is_game_over(claim_draw=True):
         engine_move = get_best_move(board, depth=4)
         if engine_move:
             ai_move_san = board.san(engine_move)
@@ -175,7 +196,7 @@ def make_move_api(request):
         'ai_played':        ai_played,
         'ai_move':          ai_move_san,
         'move_history':     move_history,
-        'is_game_over':     board.is_game_over(),
+        'is_game_over':     board.is_game_over(claim_draw=True),
         'game_over_reason': _get_game_over_reason(board),
     })
 
@@ -183,6 +204,7 @@ def make_move_api(request):
 def reset_game(request):
     # Session variables ko clear karke game restart karna
     request.session['board_fen'], request.session['move_history'] = 'start', []
+    request.session['initial_fen'] = 'start'
     return redirect('/')
 
 
@@ -191,7 +213,7 @@ def reset_game(request):
 # ==========================================================
 def _get_game_over_reason(board):
     """Returns a human-readable reason string, or None if game is still in progress."""
-    if not board.is_game_over():
+    if not board.is_game_over(claim_draw=True):
         return None
     if board.is_checkmate():
         return 'Checkmate'
