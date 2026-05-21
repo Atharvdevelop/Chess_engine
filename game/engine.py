@@ -1,6 +1,30 @@
 # pyrefly: ignore [missing-import]
 import chess
-from .tables import PAWN_TABLE, KNIGHT_TABLE, BISHOP_TABLE, KING_TABLE
+from .tables import (
+    PAWN_TABLE, KNIGHT_TABLE, BISHOP_TABLE,
+    ROOK_TABLE, QUEEN_TABLE,
+    KING_MG_TABLE, KING_EG_TABLE,
+)
+
+# ==========================================================
+# 0. GAME PHASE DETECTION: Middlegame ya Endgame?
+# ==========================================================
+# Queen material weight used to decide phase.
+# If both queens are off the board we call it endgame.
+_QUEEN_VALUE = 900
+
+def _is_endgame(board):
+    """
+    Returns True when the position is classified as an endgame.
+    Heuristic: total queen material on the board is less than one queen's value
+    (i.e. at most one queen remains, OR both queens are gone).
+    """
+    queen_material = sum(
+        _QUEEN_VALUE
+        for sq in chess.SQUARES
+        if (p := board.piece_at(sq)) and p.piece_type == chess.QUEEN
+    )
+    return queen_material < _QUEEN_VALUE  # fewer than 1 queen equivalent remaining
 
 # ==========================================================
 # 1. EVALUATION LOGIC: Board ki quality check karta hai
@@ -16,23 +40,33 @@ def evaluate_board(board, depth_left=0):
     if board.is_stalemate() or board.is_insufficient_material() or board.can_claim_draw():
         return 0
 
+    # Choose king table based on game phase
+    king_table = KING_EG_TABLE if _is_endgame(board) else KING_MG_TABLE
+
     score = 0
     # Har square ko scan karke pieces ki value aur position check karna
     for square in chess.SQUARES:
         piece = board.piece_at(square)
-        if not piece: continue
+        if not piece:
+            continue
 
         # White ke liye normal, Black ke liye mirrored table use karna
         idx = square if piece.color == chess.WHITE else chess.square_mirror(square)
         val = 0
 
-        # Piece Value + Positional Table Bonus (Tables humein tables.py se milte hain)
-        if piece.piece_type == chess.PAWN: val = 100 + PAWN_TABLE[idx]
-        elif piece.piece_type == chess.KNIGHT: val = 320 + KNIGHT_TABLE[idx]
-        elif piece.piece_type == chess.BISHOP: val = 330 + BISHOP_TABLE[idx]
-        elif piece.piece_type == chess.ROOK: val = 500
-        elif piece.piece_type == chess.QUEEN: val = 900
-        elif piece.piece_type == chess.KING: val = 20000 + KING_TABLE[idx]
+        # Piece Value + Positional Table Bonus
+        if piece.piece_type == chess.PAWN:
+            val = 100 + PAWN_TABLE[idx]
+        elif piece.piece_type == chess.KNIGHT:
+            val = 320 + KNIGHT_TABLE[idx]
+        elif piece.piece_type == chess.BISHOP:
+            val = 330 + BISHOP_TABLE[idx]
+        elif piece.piece_type == chess.ROOK:
+            val = 500 + ROOK_TABLE[idx]
+        elif piece.piece_type == chess.QUEEN:
+            val = 900 + QUEEN_TABLE[idx]
+        elif piece.piece_type == chess.KING:
+            val = 20000 + king_table[idx]
 
         # White ke points add honge aur Black ke subtract
         score += val if piece.color == chess.WHITE else -val
@@ -52,7 +86,8 @@ def order_moves(board):
 # ==========================================================
 def minimax(board, depth, alpha, beta, maximizing):
     # Draw Aversion: Same position repeat hone par 0 return karna
-    if board.is_repetition(2): return 0
+    if board.is_repetition(2):
+        return 0
 
     # Base Case: Jab depth khatam ho ya game over, board evaluate karo
     if depth == 0 or board.is_game_over():
@@ -68,7 +103,8 @@ def minimax(board, depth, alpha, beta, maximizing):
             board.pop()  # Move trial end (Undo)
             max_eval = max(max_eval, eval)
             alpha = max(alpha, eval)  # Best found so far
-            if beta <= alpha: break  # Pruning: branch discard karna
+            if beta <= alpha:
+                break  # Pruning: branch discard karna
         return max_eval
     else:
         min_eval = 99999
@@ -78,7 +114,8 @@ def minimax(board, depth, alpha, beta, maximizing):
             board.pop()
             min_eval = min(min_eval, eval)
             beta = min(beta, eval)
-            if beta <= alpha: break
+            if beta <= alpha:
+                break
         return min_eval
 
 # ==========================================================
