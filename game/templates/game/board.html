@@ -565,63 +565,80 @@
             if (parts.length === 2) return parts.pop().split(';').shift();
         }
 
-        function updateBackend(moveUci) {
+        /**
+         * Send a SAN move to the dedicated /make-move-api/ endpoint.
+         * Updates the board + history in-place — zero page reloads.
+         */
+        function sendMoveToApi(moveSan, fromSquare, toSquare) {
             if (isWaiting) return;
             isWaiting = true;
             setStatus('thinking');
 
-            fetch('/', {
+            fetch('/make-move-api/', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': getCookie('csrftoken')
                 },
-                body: JSON.stringify({ move: moveUci })
+                body: JSON.stringify({ move: moveSan })
             })
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    if (!data.success) {
-                        board.position(game.fen());
-                        isWaiting = false;
-                        setStatus('yourturn');
-                        return;
-                    }
-
-                    // Highlight the last move pair (player + AI)
-                    var uci = moveUci;
-                    highlightLastMove(uci.slice(0, 2), uci.slice(2, 4));
-
-                    // Sync chess.js + board with server's authoritative FEN
-                    game.load(data.board_fen);
-                    board.position(data.board_fen, false);
-                    selectedSquare = null;
-                    $('.square-55d6b').removeClass('highlight-square');
-
-                    updateMoveHistoryUI(data.move_history);
-
-                    if (data.is_game_over) {
-                        showGameOver(data.game_over_reason);
-                    } else {
-                        setStatus('yourturn');
-                    }
-
-                    isWaiting = false;
-                })
-                .catch(function(err) {
-                    console.error('Move failed:', err);
-                    board.position(game.fen());
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.success) {
+                    console.warn('Move rejected by server:', data.error);
+                    board.position(game.fen());  // snap back visually
                     isWaiting = false;
                     setStatus('yourturn');
-                });
+                    return;
+                }
+
+                // Highlight the squares used by the player's move
+                if (fromSquare && toSquare) {
+                    highlightLastMove(fromSquare, toSquare);
+                }
+
+                // Sync chess.js + visual board with server's authoritative FEN
+                game.load(data.board_fen);
+                board.position(data.board_fen, false);
+                selectedSquare = null;
+                $('.square-55d6b').removeClass('highlight-square');
+
+                updateMoveHistoryUI(data.move_history);
+
+                if (data.is_game_over) {
+                    showGameOver(data.game_over_reason);
+                } else {
+                    setStatus('yourturn');
+                }
+
+                isWaiting = false;
+            })
+            .catch(function(err) {
+                console.error('Move failed:', err);
+                board.position(game.fen());
+                isWaiting = false;
+                setStatus('yourturn');
+            });
         }
 
         /* ─── Board Event Handlers ─────────────────────── */
         function onDrop(source, target) {
             if (isWaiting) return 'snapback';
-            var move = game.move({ from: source, to: target, promotion: 'q' });
-            if (move === null) return 'snapback';
+
+            // Validate the move locally with chess.js first
+            var move = game.move({
+                from: source,
+                to: target,
+                promotion: 'q'   // auto-queen for simplicity
+            });
+
+            if (move === null) return 'snapback';  // illegal — snap piece back
+
+            // Undo the local move — the server is the source of truth
             game.undo();
-            updateBackend(source + target + (move.flags.includes('p') ? 'q' : ''));
+
+            // Send the SAN string (e.g. "e4", "Nf3", "O-O") to the API
+            sendMoveToApi(move.san, source, target);
         }
 
         function onSquareClick(square) {
@@ -638,7 +655,8 @@
                 var move = game.move({ from: selectedSquare, to: square, promotion: 'q' });
                 if (move !== null) {
                     game.undo();
-                    updateBackend(selectedSquare + square + (move.flags.includes('p') ? 'q' : ''));
+                    // Use SAN move string — same as onDrop
+                    sendMoveToApi(move.san, selectedSquare, square);
                     selectedSquare = null;
                 } else {
                     var piece = game.get(square);

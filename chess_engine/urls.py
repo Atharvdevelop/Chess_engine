@@ -16,10 +16,11 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
-from game.views import board_view, reset_game
+from game.views import board_view, reset_game, make_move_api
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', board_view),  # This makes the board show on the home page
-    path('reset/', reset_game), # This fixes the 'Not Found' error
+    path('', board_view),          # Board page (GET) + legacy POST kept intact
+    path('reset/', reset_game),    # Reset game session
+    path('make-move-api/', make_move_api),  # Dedicated JSON API for moves
 ]
